@@ -1,55 +1,43 @@
 import os
-
 import supervisely as sly
-
 from dotenv import load_dotenv
-from rich.console import Console
 
-console = Console()
-
-print("Script starting...")
-
-ABSOLUTE_PATH = os.path.dirname(os.path.abspath(__file__))
-PARENT_DIR = os.path.dirname(ABSOLUTE_PATH)
-print(f"Absolute path: {ABSOLUTE_PATH}\nParent dir: {PARENT_DIR}")
 
 if sly.is_development():
-    # * For convinient development, has no effect in the production.
-    local_env_path = os.path.join(PARENT_DIR, "local.env")
-    supervisely_env_path = os.path.expanduser("~/supervisely.env")
-    print(
-        "Running in development mode. Will load .env files...\n"
-        f"Local .env path: {local_env_path}, Supervisely .env path: {supervisely_env_path}"
-    )
+    # Learn more about evnironment variables in our docs:
+    # https://developer.supervisely.com/getting-started/environment-variables
+    load_dotenv(os.path.expanduser("~/supervisely.env"))
+    load_dotenv("local.env")
 
-    if os.path.exists(local_env_path) and os.path.exists(supervisely_env_path):
-        print("Both .env files exists. Will load them.")
-        load_dotenv(local_env_path)
-        load_dotenv(supervisely_env_path)
-    else:
-        print("One of the .env files is missing. It may cause errors.")
-
-TEAM_ID = sly.io.env.team_id()
-WORKSPACE_ID = sly.io.env.workspace_id()
-print(f"TEAM_ID: {TEAM_ID}, WORKSPACE_ID: {WORKSPACE_ID}")
-
+# Read environment variables and create an API client.
+team_id = sly.env.team_id()
+workspace_id = sly.env.workspace_id()
 api: sly.Api = sly.Api.from_env()
 
-print("API instance initialized.")
-
+# Read project ID from the environment variables.
 project_id = sly.env.project_id()
-print(f"Project ID: {project_id}")
 
-project_info = api.project.get_info_by_id(project_id)
-print(f"Project info: {project_info}")
+# * Option 1: save project (images and annotations) locally.
+save_dir = "my_saved_data"
+sly.Project.download(
+    api, project_id, save_dir, save_image_info=True, save_image_meta=True
+)
+print(f"Project has been downloaded to {save_dir}")
 
-task_id = api.project.clone(project_id, WORKSPACE_ID, "Cloned project")
-print(f"Result: {task_id}")
+# Now the project is saved locally. We can archive it and then save in another place.
+archive_path = f"{project_id}_archive.zip"
+sly.fs.archive_directory(save_dir, archive_path)
+print(f"Project has been archived to {archive_path}")
 
+# * Option 2: clone the project on the server.
+
+# Launch the cloning task, the method returns the task ID.
+task_id = api.project.clone(project_id, workspace_id, "my_cloned_project")
+
+# Wait until the task is finished.
 api.task.wait(task_id, api.task.Status.FINISHED)
-print("Task finished successfully!")
 
+# Now the project is cloned and we can retrieve its ID.
 task_info = api.task.get_info_by_id(task_id)
-print(f"Task info: {task_info}")
 dst_project_id = task_info["meta"]["output"]["project"]["id"]
-print(f"Cloned project ID: {dst_project_id}")
+print(f"Project has been cloned. New project ID is {dst_project_id}")
